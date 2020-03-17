@@ -2,15 +2,16 @@ package com.example.android.SEUNotify;
 
 public class Messages {
     private String title;
-    private String textMessage;
+    private String bodyMessage;
+    private  String datePublish;
     private String photoUrl;
 
-    public Messages() {
-    }
-
-    public Messages(String title, String textMessage, String photoUrl) {
+public  Messages (){
+}
+    public Messages(String title, String textMessage, String datePublish, String photoUrl) {
         this.title = title;
-        this.textMessage = textMessage;
+        this.bodyMessage = textMessage;
+        this.datePublish = datePublish;
         this.photoUrl = photoUrl;
     }
 
@@ -18,21 +19,19 @@ public class Messages {
         return title;
     }
 
-    public void setTitle(String text) {
-        this.title = text;
-    }
+    public String getTextMessage() { return bodyMessage; }
 
-    public String getTextMessage() {
-        return textMessage;
-    }
+    public String getDatePublish() { return datePublish; }
+
+    public String getPhotoUrl() { return photoUrl; }
+
+    public  void setDatePublish(String date) { this.datePublish = date ; }
 
     public void setTextMessage(String name) {
-        this.textMessage = textMessage;
+        this.bodyMessage = name;
     }
 
-    public String getPhotoUrl() {
-        return photoUrl;
-    }
+    public void setTitle(String text) { this.title = text; }
 
     public void setPhotoUrl(String photoUrl) {
         this.photoUrl = photoUrl;
