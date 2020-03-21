@@ -1,19 +1,18 @@
 package com.example.android.SEUNotify;
 
+import android.app.DatePickerDialog;
 import android.app.Dialog;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
-import android.util.Log;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
-import android.widget.AdapterView;
 import android.widget.Button;
+import android.widget.DatePicker;
 import android.widget.EditText;
 import android.widget.ImageButton;
-import android.widget.ListView;
 import android.widget.ProgressBar;
 import android.widget.Toast;
 
@@ -28,19 +27,23 @@ import com.google.firebase.database.DataSnapshot;
 import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.Query;
 import com.google.firebase.storage.FirebaseStorage;
 import com.google.firebase.storage.StorageReference;
 import com.google.firebase.storage.UploadTask;
 
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
+import java.util.Calendar;
+import java.util.Locale;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.android.SEUNotify.R.layout;
-import com.google.gson.Gson;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -50,12 +53,8 @@ public class MainActivity extends AppCompatActivity {
     public static final int RC_SIGN_IN = 1;
     private static final int RC_PHOTO_PICKER = 2;
 
-    private FirebaseUser user;
-    private ListView mMessageListView;
-    private MessageAdapter mMessageAdapter;
     private ProgressBar mProgressBar;
-    private Button mSendButton;
-    private String mUsername;
+    private Button addNewNotify;
     private FirebaseDatabase firebaseDatabase;
     private DatabaseReference databaseReference;
     private ChildEventListener childEventListener;
@@ -63,55 +62,49 @@ public class MainActivity extends AppCompatActivity {
     public FirebaseAuth.AuthStateListener authStateListener;
     private FirebaseStorage firebaseStorage;
     private StorageReference chatStorageReference;
-    public String title, publishDate, bodyText;
+    private FirebaseUser user;
+    private Query myList;
+    public String title, publishDate, bodyText, mUsername;
     public Messages messages;
+
+    public ArrayList<Messages> seuMessages;
+    private RecyclerView mMessageView;
+    private MessageAdapter mMessageAdapter;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(layout.activity_main);
-
         mUsername = ANONYMOUS;
-
         // Initialize references to views
         mProgressBar = findViewById(R.id.progressBarList);
-        mMessageListView = findViewById(R.id.messageListView);
-        mSendButton = findViewById(R.id.sendButton);
+        mMessageView = findViewById(R.id.messageRecyclerView);
+        addNewNotify = findViewById(R.id.sendButton);
+        //Initialize Firebase elements
         firebaseDatabase = FirebaseDatabase.getInstance();
         databaseReference = firebaseDatabase.getReference().child("messages");
         firebaseAuth = FirebaseAuth.getInstance();
         firebaseStorage = FirebaseStorage.getInstance();
         chatStorageReference = firebaseStorage.getReference().child("image_photo");
-        // Initialize message ListView and its adapter
-        List<Messages> seuMessages = new ArrayList<>();
-        mMessageAdapter = new MessageAdapter(this, layout.item_list, seuMessages);
-        messages = new Messages();
-        mMessageListView.setAdapter(mMessageAdapter);
-        mSendButton.setVisibility(View.INVISIBLE);
+        // Initialize messageRecycleView
+        seuMessages = new ArrayList<>();
+        mMessageAdapter = new MessageAdapter(seuMessages, this);
+        mMessageView.setLayoutManager(new LinearLayoutManager(this));
+        mMessageView.scrollToPosition(seuMessages.size());
+        mMessageView.setHasFixedSize(true);
 
-        mSendButton.setOnClickListener(new View.OnClickListener() {
+        //Setting AddingnewNotification Button
+        addNewNotify.setVisibility(View.INVISIBLE);
+        messages = new Messages();
+        addNewNotify.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 displayInputDialog();
             }
         });
+
         // Initialize progress bar
         mProgressBar.setVisibility(ProgressBar.INVISIBLE);
-        mMessageListView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
-            @Override
-            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-                Log.d("Main Activity", "clicked on item: " + position);
-                Intent intent = new Intent(MainActivity.this, MessageDetail.class);
-                Messages messages = (Messages) parent.getAdapter().getItem(position);
-
-                //here you have to serialize the object.
-                //A common way of doing this is sending the object as json.
-                //You can do it with GSON -> https://github.com/google/gson.
-                intent.putExtra("messages", new Gson().toJson(messages));
-                //you have also forgot to start the new activity :-)
-                startActivity(intent);
-            }
-        });
 
         authStateListener = new FirebaseAuth.AuthStateListener() {
 
@@ -134,19 +127,51 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         };
-    }
 
+    }
     private void displayInputDialog() {
-        Dialog dialog = new Dialog(this);
+        final Dialog dialog = new Dialog(this);
         dialog.setContentView(layout.activity_new_message);
         dialog.setTitle("Add message");
-
+        final Calendar myCalendar = Calendar.getInstance();
         final EditText titleEditText = dialog.findViewById(R.id.msgtext);
         final EditText bodyEditText = dialog.findViewById(R.id.bodytxt);
         final EditText dateEditText = dialog.findViewById(R.id.datetxt);
         Button sendButton = dialog.findViewById(R.id.sendButton);
+        Button cancelButton = dialog.findViewById(R.id.cancelButton);
         ImageButton imageButton = dialog.findViewById(R.id.photoPickerButton);
 
+        final DatePickerDialog.OnDateSetListener date = new DatePickerDialog.OnDateSetListener() {
+
+            @Override
+            public void onDateSet(DatePicker view, int year, int monthOfYear,
+                                  int dayOfMonth) {
+                myCalendar.set(Calendar.YEAR, year);
+                myCalendar.set(Calendar.MONTH, monthOfYear);
+                myCalendar.set(Calendar.DAY_OF_MONTH, dayOfMonth);
+            }
+
+        };
+
+        dateEditText.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                new DatePickerDialog(MainActivity.this, date, myCalendar
+                        .get(Calendar.YEAR), myCalendar.get(Calendar.MONTH),
+                        myCalendar.get(Calendar.DAY_OF_MONTH)).show();
+                String myFormat = "dd/MM/yyyy"; //In which you need put here
+                SimpleDateFormat sdf = new SimpleDateFormat(myFormat, Locale.US);
+
+                dateEditText.setText(sdf.format(myCalendar.getTime()));
+            }
+        });
+
+        cancelButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                dialog.dismiss();
+            }
+        });
         imageButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -169,8 +194,10 @@ public class MainActivity extends AppCompatActivity {
                 messages.setDatePublish(publishDate);
                 databaseReference.push().setValue(messages);
                 Toast.makeText(MainActivity.this, "upload success", Toast.LENGTH_SHORT).show();
+                dialog.dismiss();
             }
         });
+
     }
 
     @Override
@@ -179,8 +206,8 @@ public class MainActivity extends AppCompatActivity {
         if (authStateListener != null) {
             firebaseAuth.removeAuthStateListener(authStateListener);
         }
-        mMessageAdapter.clear();
-        detachDatabaseReadListener();
+
+       detachDatabaseReadListener();
     }
 
 
@@ -201,7 +228,6 @@ public class MainActivity extends AppCompatActivity {
             Uri selectedImageUri = data.getData();
             final StorageReference photoRef = chatStorageReference.child(selectedImageUri.getLastPathSegment());
             UploadTask uploadTask = photoRef.putFile(selectedImageUri);
-
             Task<Uri> urlTask = uploadTask.continueWithTask(new Continuation<UploadTask.TaskSnapshot, Task<Uri>>() {
                 @Override
                 public Task<Uri> then(@NonNull Task<UploadTask.TaskSnapshot> task) throws Exception {
@@ -218,6 +244,7 @@ public class MainActivity extends AppCompatActivity {
                         Uri downloadUri = task.getResult();
                         messages.setPhotoUrl(downloadUri.toString());
                         databaseReference.push().setValue(messages);
+
                     } else {
                         Toast.makeText(MainActivity.this, "upload failed", Toast.LENGTH_SHORT).show();
                     }
@@ -235,7 +262,13 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
+    protected void onStart() {
+        super.onStart();
+    }
+
+    @Override
     public boolean onOptionsItemSelected(MenuItem item) {
+
         switch (item.getItemId()) {
             case R.id.sign_out_menu:
                 AuthUI.getInstance().signOut(this);
@@ -248,11 +281,11 @@ public class MainActivity extends AppCompatActivity {
     private void onSignedInInitialize(String username) {
 
         if (user.getDisplayName().contains("admin")) {
-            mSendButton.setVisibility(View.VISIBLE);
+            addNewNotify.setVisibility(View.VISIBLE);
             mUsername = username;
             attachDatabaseReadListener();
         } else {
-            mSendButton.setVisibility(View.INVISIBLE);
+            addNewNotify.setVisibility(View.INVISIBLE);
             mUsername = username;
             attachDatabaseReadListener();
         }
@@ -261,7 +294,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void onSignedOutCleanup() {
         mUsername = ANONYMOUS;
-        mMessageAdapter.clear();
+        seuMessages.clear();
         detachDatabaseReadListener();
     }
 
@@ -271,7 +304,8 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void onChildAdded(DataSnapshot dataSnapshot, String s) {
                     Messages friendlyMessage = dataSnapshot.getValue(Messages.class);
-                    mMessageAdapter.add(friendlyMessage);
+                    seuMessages.add(friendlyMessage);
+                    mMessageView.setAdapter(mMessageAdapter);
                 }
 
                 public void onChildChanged(DataSnapshot dataSnapshot, String s) {
@@ -296,6 +330,6 @@ public class MainActivity extends AppCompatActivity {
             childEventListener = null;
         }
     }
-
-
 }
+
+
